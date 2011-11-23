@@ -110,7 +110,7 @@ The supplier-facing interface is made of two accounts:
       |				|
       |			        +--- recharges [I] 
       |				|     
-      |			        +---  fees [I]
+      |			        +--- fees [I]
       |
       |
       +----------- expenses [P,E]+
@@ -153,15 +153,215 @@ From an accounting point of view, a supplier-like subject can be abstracted as:
 Common transactions
 ===================
 
+In the following sections, we list the most common types of transactions happening between economic subjects in a DES.
+
+For each kind of transaction, we give a general description plus technical details about how to use the accounting API provided by OpenDES to record a concrete transaction of the given type.
+
+For convenience reasons, transaction types are grouped by the subject(s) they involve.
+
 Person <--> GAS
 ---------------
+
+Membership fees
+~~~~~~~~~~~~~~~
+description
+  A GAS may requires its members to pay a membership fee (usually on a per-year basis).
+
+transaction's scheme
+  ``gas``:= GAS to which the fee is payed
+  ``person``:= person being member of GAS ``gas``
+::
+  person.accounting.system['/wallet'] -> person.accounting.system['/expenses/gas/<gas.uid>/fees'] -> 
+  -> gas.accounting.system['/incomes/fees'] -> gas.accounting.system['/cash']
+
+usage
+  To record the payment of a membership fee by a GAS member, call ``person.subject.accounting.pay_membership_fee(gas, year)``
+  :arguments:
+	`gas`
+	  the GAS to which this fee is being payed (as a ``GAS`` model instance)
+	`year`
+	  the year (as a string) to which this fee refers to  
+  :return value:	
+  	``None``
+  :exceptions:
+	 if  ``person`` is not a member of GAS ``gas``, a ``MalformedTransaction`` exception is raised
+
+Recharges
+~~~~~~~~~
+description
+  GAS members can (actually, should!) recharge their virtual pre-payed credit cards on a regular basis, in order to provide their GAS with financial coverage for orders they made;  we refer to these routine operations simply as *recharges*.
+
+transaction's scheme
+  ``gas``:=  GAS with respect to which the recharge is being done
+  ``person``:= person being member of GAS ``gas``
+::
+  person.accounting.system['/wallet'] -> person.accounting.system['/expenses/gas/<gas.uid>/recharges'] -> 
+  -> gas.accounting.system['/incomes/recharges'] -> gas.accounting.system['/members/<member.uid>']
+
+usage
+  To record a recharge made by a person (as a GAS member), call ``person.accounting.do_recharge(gas, amount)``
+  :arguments:
+	`gas`
+	  the GAS to which this recharge is being made (as a ``GAS`` model instance)
+	`amount`
+	  the recharge's amount
+  :return value:	
+  	``None``
+  :exceptions:
+	If ``person`` is not a member of GAS ``gas``, or if ``amount`` is a negative number, a ``MalformedTransaction`` exception is raised.
 
 GAS <--> GAS
 ------------
 
+Withdrawals from GAS members' accounts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+description
+  Withdraw a given amount of money from a GAS member's account and bestow it to the GAS's cash.  
+
+transaction's scheme
+  ``gas``:=  GAS making the withdrawal
+  ``member``:= GAS member whose account undergoes the withdrawal
+::
+  gas.accounting.system['/members/<member.uid>'] -> gas.accounting.system['/cash']
+
+usage
+  To record a withdrawal made by a GAS from a GAS member's account, call ``gas.accounting.withdraw_from_member_account(self, member, amount, refs=None)``
+  :arguments:
+	`member`
+	   the GAS member whose account undergoes the withdrawal
+	`amount`
+	   amount of the withdrawal 
+	`refs` 
+	   [optional] any references for this transaction (as an iterable of model instances);
+           For example:  a list of GAS member orders this withdrawal is related to
+  :return value:	
+  	``None``
+  :exceptions:
+	 If ``member`` is not a member of ``gas``, a ``MalformedTransaction`` exception is raised.	
+
+
 GAS <--> Supplier
 -----------------
+Supplier payments
+~~~~~~~~~~~~~~~~~
+description
+  A payment made by a GAS to a supplier.  Note this kind of payment is generic, i.e. it may refer to one or more supplier orders, or even part thereof.
 
+transaction's scheme
+  ``gas``:=  GAS making the payment
+  ``supplier``:= supplier receiving the payment
+::
+  gas.accounting.system['/cash'] -> gas.accounting.system['/expenses/suppliers/<supplier.uid>'] -> 
+  -> supplier.accounting.system['/incomes/gas/<gas.uid>'] -> supplier.accounting.system['/wallet']
+
+usage
+  To record a payment made by a GAS to a supplier, call ``gas.accounting.pay_supplier(self, pact, amount, refs=None)``
+  :arguments:
+	`pact`
+	   the solidal pact w.r.t. which this payment is made (i.e. ``pact.gas == gas``, ``pact.supplier == supplier``)	
+	`amount`
+	   the (positive) payment amount 
+	`refs` 
+	   [optional] any references for this transaction (as an iterable of model instances);
+           For example:  a list of supplier orders this payment is related to
+  :return value:	
+  	``None``
+  :exceptions:
+	If ``amount`` is negative, a ``MalformedTransaction`` exception is raised (supplier-to-GAS money transfers should be treated as *refunds*).
+
+
+Order payments
+~~~~~~~~~~~~~~
+description
+  A payment made by a GAS to a supplier referring to a specific supplier order.
+  Actually, such operation is a two-step process:
+    1. First, the GAS withdraws from each member's account an amount of money corresponding
+       to the total cost of products (s)he bought during the given order (price & quantity are as recorded by the invoice!)
+    2. Then, the GAS collects this money amounts and transfers them to the supplier's account 
+
+transaction's scheme
+  This transaction is just a combination of ``Supplier payments``_ and ``Withdrawals from GAS members' accounts``_ (see description above for details)
+usage
+  To record an order payment made by a GAS to a supplier, call ``gas.accounting.pay_supplier_order(self, order)``
+  :arguments:
+	`order`
+	   the supplier order being payed (a ``GASSupplierOrder`` model instance)
+  :return value:	
+  	``None``
+  :exceptions:
+	If the given supplier order hasn't been fully withdrawn by GAS members yet, raise ``MalformedTransaction``
+
+Refunds
+~~~~~~~
+description
+  A refund made by a supplier to a GAS (think e.g. of discounts made by the supplier in case of damaged goods).  
+
+transaction's scheme
+  ``supplier``:= supplier making the payment
+  ``gas``:=  GAS receiving the payment
+::
+  supplier.accounting.system['/wallet']   -> supplier.accounting.system['/incomes/gas/<gas.uid>'] ->   
+  -> gas.accounting.system['/expenses/suppliers/<supplier.uid>'] -> gas.accounting.system['/cash']
+
+usage
+  To record a refund made by a supplier to a GAS, call ``supplier.accounting.refund_gas(self, gas, amount, refs=None)``
+  :arguments:
+	`gas`
+	   the GAS being refunded (as a ``GAS model instance``)
+	`amount`
+	   the (positive) amount of the refund
+	`refs` 
+	   [optional] any references for this transaction (as an iterable of model instances);
+           For example:  a list of supplier orders this refund is related to
+  :return value:	
+  	``None``
+  :exceptions:
+	If GAS ``gas`` doesn't have an active solidal pact with this supplier, or if ``amount`` is negative, raise a ``MalformedTransaction`` exception.
+
+Utility functions
+=================
+confirm_invoice_payment
+-----------------------
+description
+  A supplier should be able to confirm that an invoice issued by him/her has been actually payed.
+
+usage
+  To confirm the payment of an invoice issued by a supplier, call ``supplier.accounting.confirm_invoice_payment(self, invoice)``	
+  :arguments:
+	`invoice`
+	   the invoice to be confirmed (as an ``Invoice`` model instance)
+  :return value:	
+  	``None``
+  :exceptions:
+	If ``invoice`` isn't an ``Invoice`` model instance, or if it was issued by another subject, raise ``ValueError``.
+
+        
+
+accounted_amount_by_gas_member
+------------------------------
+description
+  Given a supplier order ``order``, return an annotated set of GAS members  partecipating to that order.
+        
+  Each GAS member instance will have an ``.accounted_amount`` attribute, representing the total amount of money already accounted for with respect 
+  to the entire set of orders placed by that GAS member within ``order``.
+        
+   A (member) order is considered to be "accounted" iff a transaction recording it
+   exists within that GAS's accounting system.
+        
+
+usage
+  If ``gas`` is the GAS who issued the supplier order, call ``gas.accounting.accounted_amount_by_gas_member(self, order)``
+  :arguments:
+	``order``
+	    the order to be accounted for (as a ``GASSupplierOrder`` model instance)
+  :return value:	
+  	``None``
+  :exceptions:
+	If ``order`` has not been placed by the GAS owning this accounting system,  raise ``TypeError``.   
+
+
+
+----
 
 .. _django-simple-accounting: https://github.com/seldon/django-simple-accounting
 
