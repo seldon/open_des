@@ -15,6 +15,7 @@ Each economic subject can exchange money, goods and services with other economic
 In order to record and manage transactions, we need the concept of **account**.  An account is just a way to group and label transactions between economic subjects: a transaction can be described as a money flow from a source account to one or more target accounts, potentially passing through intermediate accounts.  Each account belongs to one (and only one) economic subject, the account's owner; accounts belonging to a given subject are organized in tree-like structure (**account hierarchy**) and together made what we call the subject's **accounting system**.
 
 Accounts  can be of one of two very different types:
+
 * **stock-like** accounts represent amounts of money owned by the subject. By convention, if these amounts are positive they are called *assets* (e.g. cash in wallet), while if negative they are called **liabilities** (e.g. a debt);
 * **flux-like** accounts are similar to counters recording money flows *between* different accounting systems
 
@@ -416,7 +417,7 @@ accounted_amount_by_gas_member
 
 
 
-----
+
 
 .. _django-simple-accounting: https://github.com/seldon/django-simple-accounting
 
