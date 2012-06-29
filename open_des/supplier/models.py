@@ -1,9 +1,11 @@
 from django.db import models
 
-from accounting.models import account_type, AccountingDescriptor, economic_subject  
+from accounting.models import account_type, AccountingDescriptor  
 
-@economic_subject              
-class Supplier(models.Model):
+from open_des.des.models import Subject
+
+            
+class Supplier(Subject):
     # a unique (database independent) ID (an ASCII string) for ``Supplier`` model instances
     uid = models.CharField()
     name = models.CharField(max_length=128, unique=True)

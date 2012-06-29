@@ -1,11 +1,14 @@
 from django.db import models
 
-from accounting.models import account_type, AccountingDescriptor, economic_subject, Account
+from accounting.models import account_type, AccountingDescriptor, Account
 
 from open_des.person.models import Person
+from open_des.des.models import Subject
+from open_des.gas.managers import GasReferrerManager
 
-@economic_subject
-class Gas(models.Model):
+
+
+class Gas(Subject):
     # a unique (database independent) ID (an ASCII string) for ``GAS`` model instances
     uid = models.CharField()
     name = models.CharField(max_length=128, unique=True)
@@ -27,7 +30,10 @@ class Gas(models.Model):
         system.add_account(parent_path='/incomes', name='recharges', kind=account_type.income)
         # membership fees
         system.add_account(parent_path='/incomes', name='fees', kind=account_type.income)
-        
+    
+    def natural_key(self):
+        return self.uid
+            
     @property
     def pacts(self):
         """
@@ -42,14 +48,38 @@ class Gas(models.Model):
         """
         suppliers = set([pact.supplier for pact in self.pacts])
         return suppliers 
-
-    def natural_key(self):
-        return self.uid
+    
+    @property
+    def members(self):
+        """
+        The queryset of current members for this GAS (as ``Person`` instances).
+        """
+        return GaSMember.current.filter(gas=self)
+    
+    @property
+    def referrers(self):
+        """
+        The queryset of current referrers for this GAS (as ``Persons`` instances).
+        """
+        return GasReferrer.current.filter(gas=self)
+    
     
 
 class GaSMember(models.Model):
+    """
+    A relationship table modeling membership of a person into a given GAS.
+    
+    A person may be member of a given GAS for a period of time, then leave the group 
+    and re-join the group an arbitrary number of times.  In order to reconstruct a member's
+    history, the same ``member_id`` must be the assigned every time.
+    """
+    member_id = models.PositiveSmallIntegerField()
     person = models.ForeignKey(Person, related_name='gas_membership_set')
     gas = models.ForeignKey(Gas)
+    # when the membership started
+    start_date = models.DateField()
+    # when the membership ended (if so)
+    end_date = models.DateField(blank=True, null=True)
     
     def setup_accounting(self):
         person_system = self.person.subject.accounting_system
@@ -80,3 +110,27 @@ class GaSMember(models.Model):
         The queryset of orders this member has issued against his/her GAS. 
         """
         return self.issued_order_set.all()
+    
+    
+class GasReferrer(models.Model):
+    """
+    A relationship table mapping the fact that a person is a referrer for a given GAS.
+    
+    This role is assigned within a time-frame; so, we are able to answer questions such as:
+        
+        "Who was the referrer for GAS XYZ at a given date in the past ?"
+          
+    """
+    person = models.ForeignKey(Person, related_name='gas_referrer_role_set')
+    gas = models.ForeignKey(Gas)
+    # when the membership started
+    start_date = models.DateField()
+    # when the membership ended (if so)
+    end_date = models.DateField(blank=True, null=True)
+    
+    objects = models.Manager()
+    # filter out inactive roles
+    # TODO: maybe this may be implemented via a ``QueryManager``
+    current = GasReferrerManager()
+
+## COMMENT: each role may be modeled after this

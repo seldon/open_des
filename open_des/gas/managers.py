@@ -7,3 +7,10 @@ class GasManager(models.Manager):
 class GasMemberManager(models.Manager):
     def get_by_natural_key(self, person, gas):
         return self.get(person=person, gas=gas)
+    
+class GasReferrerManager(models.Manager):
+    def current(self):
+        """
+        Return only active roles.
+        """
+        pass

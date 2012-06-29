@@ -63,6 +63,6 @@ class WorkflowStateChange(models.Model):
         Should work similar to ``AccountingProxy``
         should take as input the name of the model field contataining status info. 
         """
-        pass
+        
     
 

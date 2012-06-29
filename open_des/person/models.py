@@ -1,6 +1,10 @@
 from django.db import models
 
-from accounting.models import account_type, AccountingDescriptor, economic_subject  
+from accounting.models import account_type, AccountingDescriptor
+
+from open_des.des.models import Subject 
+  
+
 
 @economic_subject
 class Person(models.Model):
