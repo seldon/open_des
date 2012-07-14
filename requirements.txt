@@ -1,1 +1,2 @@
-django-model-utils
+-e git://github.com/carljm/django-model-utils.git#egg=django-model-utils
+

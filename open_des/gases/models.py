@@ -2,20 +2,29 @@ from django.db import models
 
 from accounting.models import account_type, AccountingDescriptor, Account
 
-from open_des.person.models import Person
+from open_des.utils.fields import CurrencyField
 from open_des.des.models import Subject
-from open_des.gas.managers import GasReferrerManager
+from open_des.people.models import Person 
+from open_des.gases.managers import GasReferrerManager
 
 
 
 class Gas(Subject):
     # a unique (database independent) ID (an ASCII string) for ``GAS`` model instances
-    uid = models.CharField()
+    uid = models.CharField(unique=True)
+    # a name for this GAS
     name = models.CharField(max_length=128, unique=True)
+    # annual fee to be payed in order to become a member of this GAS
     membership_fee = CurrencyField(null=True, blank=True)
+    ## cache fields
+    # whether this is a second-order GAS (a.k.a. "Retina") 
+    is_retina = models.BooleanField(default=False)
     
     accounting =  AccountingDescriptor(GasAccountingProxy)
-
+       
+    def save(self, *args, **kwargs):
+        super(self, Gas).save(*args, **kwargs)
+    
     def setup_accounting(self):
         self.subject.init_accounting_system()
         system = self.accounting_system
@@ -50,11 +59,18 @@ class Gas(Subject):
         return suppliers 
     
     @property
-    def members(self):
+    def people_members(self):
         """
-        The queryset of current members for this GAS (as ``Person`` instances).
+        A queryset of current person members for this GAS (as ``Person`` instances).
         """
-        return GaSMember.current.filter(gas=self)
+        raise NotImplementedError
+    
+    @property
+    def gas_members(self):
+        """
+        A queryset of current GAS members for this GAS (as ``Gas`` instances).
+        """
+        raise NotImplementedError
     
     @property
     def referrers(self):
@@ -65,20 +81,20 @@ class Gas(Subject):
     
     
 
-class GaSMember(models.Model):
+class IsGaSMember(models.Model):
     """
-    A relationship table modeling membership of a person into a given GAS.
+    A relationship table modeling membership of a subject (person or GAS) into a given GAS.
     
     A person may be member of a given GAS for a period of time, then leave the group 
     and re-join the group an arbitrary number of times.  In order to reconstruct a member's
     history, the same ``member_id`` must be the assigned every time.
     """
     member_id = models.PositiveSmallIntegerField()
-    person = models.ForeignKey(Person, related_name='gas_membership_set')
+    subject = models.ForeignKey(Subject, related_name='gas_membership_set')
     gas = models.ForeignKey(Gas)
-    # when the membership started
+    # when this membership started
     start_date = models.DateField()
-    # when the membership ended (if so)
+    # when this membership ended (if so)
     end_date = models.DateField(blank=True, null=True)
     
     def setup_accounting(self):
